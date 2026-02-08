@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -406,4 +407,59 @@ const InvestmentPage = () => {
                   <p className="text-sm text-zinc-400 mb-6">Plan: <span className="text-amber-500">{selectedPlan.name}</span></p>
 
                   <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 mb-6">
-             
+                     <p className="text-xs text-zinc-500 uppercase font-bold mb-1">Source: Booking Wallet</p>
+                     <p className="text-xl font-mono text-emerald-400">₹{stats.bookingWallet.toLocaleString()}</p>
+                  </div>
+
+                  <div className="mb-6">
+                     <label className="text-xs text-zinc-500 uppercase font-bold block mb-2">Investment Amount</label>
+                     <input 
+                        type="number" 
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-white focus:border-amber-500 outline-none"
+                        value={investmentAmount}
+                        onChange={(e) => setInvestmentAmount(e.target.value)}
+                     />
+                     <p className="text-[10px] text-zinc-500 mt-1">Min required: ₹{selectedPlan.minAmount.toLocaleString()}</p>
+                  </div>
+
+                  <button 
+                     onClick={confirmInvestment}
+                     className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-black font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-amber-900/20 transition-all"
+                  >
+                     Confirm & Pay
+                  </button>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* CONFIRM WITHDRAWAL MODAL */}
+      {showWithdrawModal && (
+         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-zinc-900 border border-zinc-800 w-full max-w-sm rounded-2xl shadow-2xl relative animate-in zoom-in-95 duration-200">
+               <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-white">Confirm Withdrawal</h3>
+                  <button onClick={() => setShowWithdrawModal(false)}><X size={20} className="text-zinc-500"/></button>
+               </div>
+               <div className="p-6">
+                  <div className="text-center mb-6">
+                     <p className="text-zinc-500 text-sm mb-2">You are withdrawing</p>
+                     <p className="text-3xl font-mono font-bold text-white">₹{parseInt(withdrawAmount).toLocaleString()}</p>
+                     <p className="text-emerald-500 text-xs mt-1">From ROI Balance</p>
+                  </div>
+                  <button 
+                     onClick={confirmWithdraw}
+                     className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20"
+                  >
+                     Confirm Withdrawal
+                  </button>
+               </div>
+            </div>
+         </div>
+      )}
+
+    </div>
+  );
+};
+
+export default InvestmentPage;
