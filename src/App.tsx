@@ -1,8 +1,7 @@
-
-impoimport React, { useState, Suspense, useLayoutEffect } from 'react';
+import React, { useState, Suspense, useLayoutEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
-// import { UserRole } from './types';  <-- HATA DO
+// import { UserRole } from './types';  <-- HATA DIYA
 import { Menu, Ban, AlertTriangle, Clock } from 'lucide-react';
 
 // --- CORE COMPONENTS ---
@@ -60,7 +59,8 @@ const AppContent = () => {
       return <Navigate to="/login" replace />;
   }
 
-  if (config.maintenance.isActive && role !== UserRole.ADMIN) {
+  // FIXED: UserRole.ADMIN replaced with string 'ADMIN'
+  if (config.maintenance.isActive && role !== 'ADMIN') {
       return (
         <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-4 text-center">
             <AlertTriangle size={64} className="text-amber-500 mb-8 animate-pulse" />
