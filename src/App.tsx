@@ -1,8 +1,8 @@
 
-import React, { useState, Suspense, useLayoutEffect } from 'react';
+impoimport React, { useState, Suspense, useLayoutEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
-import { UserRole } from './types';
+// import { UserRole } from './types';  <-- HATA DO
 import { Menu, Ban, AlertTriangle, Clock } from 'lucide-react';
 
 // --- CORE COMPONENTS ---
