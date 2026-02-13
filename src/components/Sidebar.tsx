@@ -1,35 +1,21 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  PlusCircle,
-  Image,
-  Wallet,
-  Users,
-  TrendingUp,
-  Sparkles,
-  User,
-  Settings,
-  LogOut,
-  X,
-  Scissors,
-  Shirt,
-  Package,
-  Truck,
-  Box,
-  PenTool,
-  Zap,
-  Briefcase,
-  Layers
-} from 'lucide-react';
+import * as Icons from 'lucide-react';
 
 import { useApp } from '../context/AppContext';
-import { UserRole } from '../types'; // ✅ FIXED: Normal import (NOT type-only)
+import { UserRole } from '../types';
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+type MenuItemProps = {
+  to: string;
+  icon: keyof typeof Icons;
+  label: string;
+  isDanger?: boolean;
+};
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const location = useLocation();
@@ -50,32 +36,38 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     return allowedRoles.includes(role);
   };
 
-  const MenuItem = ({ to, icon: Icon, label, isDanger = false }: any) => (
-    <Link
-      to={to}
-      onClick={onClose}
-      className={`flex items-center gap-4 px-4 py-3 mb-1 rounded-lg transition-colors duration-150 group ${
-        isActive(to)
-          ? 'text-amber-500 bg-zinc-900'
-          : isDanger
-          ? 'text-red-400 hover:bg-red-500/10'
-          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
-      }`}
-    >
-      <Icon
-        size={20}
-        strokeWidth={1.5}
-        className={
+  const MenuItem = ({ to, icon, label, isDanger = false }: MenuItemProps) => {
+    const Icon = Icons[icon];
+
+    if (!Icon) return null;
+
+    return (
+      <Link
+        to={to}
+        onClick={onClose}
+        className={`flex items-center gap-4 px-4 py-3 mb-1 rounded-lg transition-colors duration-150 group ${
           isActive(to)
-            ? 'text-amber-500'
+            ? 'text-amber-500 bg-zinc-900'
             : isDanger
-            ? 'text-red-400'
-            : 'text-zinc-500 group-hover:text-white'
-        }
-      />
-      <span className="font-medium tracking-wide text-sm">{label}</span>
-    </Link>
-  );
+            ? 'text-red-400 hover:bg-red-500/10'
+            : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+        }`}
+      >
+        <Icon
+          size={20}
+          strokeWidth={1.5}
+          className={
+            isActive(to)
+              ? 'text-amber-500'
+              : isDanger
+              ? 'text-red-400'
+              : 'text-zinc-500 group-hover:text-white'
+          }
+        />
+        <span className="font-medium tracking-wide text-sm">{label}</span>
+      </Link>
+    );
+  };
 
   const showWorkFloor =
     hasAccess([UserRole.MEASUREMENT]) ||
@@ -88,11 +80,11 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/90 z-40 animate-in fade-in duration-200"
+        className="fixed inset-0 bg-black/90 z-40"
         onClick={onClose}
       />
 
-      <div className="w-72 h-screen fixed left-0 top-0 bg-[#09090b] border-r border-zinc-800 flex flex-col z-50 animate-in slide-in-from-left duration-200 shadow-2xl">
+      <div className="w-72 h-screen fixed left-0 top-0 bg-[#09090b] border-r border-zinc-800 flex flex-col z-50 shadow-2xl">
         <div className="p-6 flex justify-between items-start border-b border-zinc-900 bg-zinc-950">
           <div>
             <h2 className="text-amber-500 font-bold tracking-widest text-sm mb-1 uppercase">
@@ -104,26 +96,23 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-600 hover:text-white transition-colors"
+            className="text-zinc-600 hover:text-white"
           >
-            <X size={24} strokeWidth={1.5} />
+            <Icons.X size={24} strokeWidth={1.5} />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1 scrollbar-hide">
-          <MenuItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" />
-          <MenuItem to="/team" icon={Users} label="My Team & Network" />
-          <MenuItem to="/magic-income" icon={Sparkles} label="Magic Matrix" />
-          <MenuItem to="/wallets" icon={Wallet} label="Accounting & Wallets" />
-          <MenuItem to="/new-order" icon={PlusCircle} label="New Booking" />
-          <MenuItem to="/gallery" icon={Image} label="Design Studio" />
+        <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
 
-          {config.isInvestmentEnabled && (
-            <MenuItem
-              to="/investment"
-              icon={TrendingUp}
-              label="Investment Vault"
-            />
+          <MenuItem to="/dashboard" icon="LayoutDashboard" label="Dashboard" />
+          <MenuItem to="/team" icon="Users" label="My Team & Network" />
+          <MenuItem to="/magic-income" icon="Sparkles" label="Magic Matrix" />
+          <MenuItem to="/wallets" icon="Wallet" label="Accounting & Wallets" />
+          <MenuItem to="/new-order" icon="PlusCircle" label="New Booking" />
+          <MenuItem to="/gallery" icon="Image" label="Design Studio" />
+
+          {config?.isInvestmentEnabled && (
+            <MenuItem to="/investment" icon="TrendingUp" label="Investment Vault" />
           )}
 
           {showWorkFloor && (
@@ -134,28 +123,28 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               </p>
 
               {hasAccess([UserRole.MEASUREMENT]) && (
-                <MenuItem to="/orders" icon={PenTool} label="Measurements" />
+                <MenuItem to="/orders" icon="PenTool" label="Measurements" />
               )}
               {hasAccess([UserRole.CUTTING]) && (
-                <MenuItem to="/orders" icon={Scissors} label="Cutting Dept" />
+                <MenuItem to="/orders" icon="Scissors" label="Cutting Dept" />
               )}
               {hasAccess([UserRole.SHIRT_MAKER]) && (
-                <MenuItem to="/orders" icon={Shirt} label="Shirt Dept" />
+                <MenuItem to="/orders" icon="Shirt" label="Shirt Dept" />
               )}
               {hasAccess([UserRole.PANT_MAKER]) && (
-                <MenuItem to="/orders" icon={Briefcase} label="Pant Dept" />
+                <MenuItem to="/orders" icon="Briefcase" label="Pant Dept" />
               )}
               {hasAccess([UserRole.COAT_MAKER]) && (
-                <MenuItem to="/orders" icon={Layers} label="Coat/Suit Dept" />
+                <MenuItem to="/orders" icon="Layers" label="Coat/Suit Dept" />
               )}
               {hasAccess([UserRole.FINISHING]) && (
-                <MenuItem to="/orders" icon={Package} label="Kaaj-Button Dept" />
+                <MenuItem to="/orders" icon="Package" label="Kaaj-Button Dept" />
               )}
               {hasAccess([UserRole.PRESS]) && (
-                <MenuItem to="/orders" icon={Zap} label="Press Station" />
+                <MenuItem to="/orders" icon="Zap" label="Press Station" />
               )}
               {hasAccess([UserRole.DELIVERY]) && (
-                <MenuItem to="/orders" icon={Truck} label="Delivery Logistics" />
+                <MenuItem to="/orders" icon="Truck" label="Delivery Logistics" />
               )}
             </>
           )}
@@ -163,23 +152,23 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           {(role === UserRole.ADMIN || role === UserRole.MANAGER) && (
             <>
               <div className="my-6 border-t border-zinc-900 mx-2" />
-              <MenuItem to="/materials" icon={Box} label="Inventory Manager" />
+              <MenuItem to="/materials" icon="Box" label="Inventory Manager" />
             </>
           )}
 
           <div className="my-6 border-t border-zinc-900 mx-2" />
-          <MenuItem to="/profile" icon={User} label="Digital ID & Profile" />
+          <MenuItem to="/profile" icon="User" label="Digital ID & Profile" />
 
           {role === UserRole.ADMIN && (
-            <MenuItem to="/config" icon={Settings} label="System Config" />
+            <MenuItem to="/config" icon="Settings" label="System Config" />
           )}
 
           <div className="pt-4">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-red-500 hover:bg-red-500/5 transition-all duration-200"
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-red-500 hover:bg-red-500/5"
             >
-              <LogOut size={20} strokeWidth={1.5} />
+              <Icons.LogOut size={20} strokeWidth={1.5} />
               <span className="font-medium text-sm">Sign Out</span>
             </button>
           </div>
