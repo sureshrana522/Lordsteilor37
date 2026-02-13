@@ -1,24 +1,36 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+// src/context/AppContext.tsx
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth } from "../services/firebase";
-import { db } from "../services/firebase";
+import { auth, db } from "../services/firebase"; // Make sure this file exports both auth and db
 
-const AppContext = createContext<any>(null);
+interface AppContextType {
+  user: User | null;
+  loading: boolean;
+}
 
-export const AppProvider = ({ children }: any) => {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userId = firebaseUser.uid;
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: User | null) => {
+      setLoading(true);
 
+      if (firebaseUser) {
+        const userid = firebaseUser.uid;
         setUser(firebaseUser);
 
-        // 🔥 WALLET AUTO CREATE FIX
-        const walletRef = doc(db, "wallet", userId);
+        // 🔥 Auto-create wallet if it doesn't exist
+        const walletRef = doc(db, "wallets", userid); // "wallets" collection (plural is better)
         const walletSnap = await getDoc(walletRef);
 
         if (!walletSnap.exists()) {
@@ -28,6 +40,9 @@ export const AppProvider = ({ children }: any) => {
             totalEarned: 0,
             createdAt: serverTimestamp(),
           });
+          console.log(`Wallet created for user: ${userid}`);
+        } else {
+          console.log(`Wallet already exists for user: ${userid}`);
         }
       } else {
         setUser(null);
@@ -36,8 +51,9 @@ export const AppProvider = ({ children }: any) => {
       setLoading(false);
     });
 
-    return () => unsub();
-  }, []);
+    // Cleanup subscription
+    return () => unsubscribe();
+  }, []); // Empty dependency array → runs once on mount
 
   return (
     <AppContext.Provider value={{ user, loading }}>
@@ -46,4 +62,11 @@ export const AppProvider = ({ children }: any) => {
   );
 };
 
-export const useApp = () => useContext(AppContext);
+// Custom hook to use the context safely
+export const useApp = (): AppContextType => {
+  const context = useContext(AppContext);
+  if (context === undefined) {
+    throw new Error("useApp must be used within an AppProvider");
+  }
+  return context;
+};
