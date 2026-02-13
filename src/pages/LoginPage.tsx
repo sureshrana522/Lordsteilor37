@@ -1,43 +1,58 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  ShieldCheck, UserPlus, ArrowRight, CheckCircle2,
-  Loader2, LogIn, Store, Truck,
-  Shirt, Scissors, Briefcase, PenTool, Package
-} from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { UserRole } from '../types';
+  UserPlus,
+  CheckCircle2,
+  Loader2,
+  LogIn
+} from "lucide-react";
+import { useApp } from "../context/AppContext";
 
-/* =========================
-   JOIN FORM COMPONENT
-========================= */
+/* ================= JOIN FORM ================= */
 
 const JoinForm = ({ referralId }: { referralId: string }) => {
-  const { autoRegister, loginUser } = useApp();
+  const ctx = useApp();
   const navigate = useNavigate();
 
-  const [name, setName] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [role, setRole] = useState<UserRole>(UserRole.SHIRT_MAKER);
-  const [generatedCreds, setGeneratedCreds] = useState<{ id: string; password: string } | null>(null);
+  const autoRegister = (ctx as any).autoRegister;
+  const loginUser = ctx.loginUser;
+
+  const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [role, setRole] = useState("SHIRT_MAKER");
+  const [generatedCreds, setGeneratedCreds] = useState<{
+    id: string;
+    password: string;
+  } | null>(null);
 
   const handleSubmit = () => {
-    if (!name || !mobile) return alert("Fill Name and Mobile.");
+    if (!name || !mobile) {
+      alert("Fill Name and Mobile");
+      return;
+    }
+
+    if (!autoRegister) {
+      alert("Registration system not ready");
+      return;
+    }
+
     const creds = autoRegister(name, mobile, role, referralId);
     setGeneratedCreds(creds);
   };
 
   const handleAutoLogin = () => {
-    if (generatedCreds) {
-      loginUser(role, generatedCreds.id);
-      navigate('/dashboard');
-    }
+    if (!generatedCreds) return;
+    loginUser(role, generatedCreds.id);
+    navigate("/dashboard");
   };
+
+  /* SUCCESS SCREEN */
 
   if (generatedCreds) {
     return (
       <div className="bg-zinc-900 border border-emerald-500/40 rounded-2xl p-8 text-center">
         <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-4" />
+
         <h3 className="text-xl text-white mb-6">Registration Done!</h3>
 
         <div className="bg-black p-5 rounded-xl border border-zinc-800 mb-6 text-left space-y-3">
@@ -45,9 +60,12 @@ const JoinForm = ({ referralId }: { referralId: string }) => {
             <p className="text-xs text-zinc-500">Mobile ID</p>
             <p className="text-white font-mono">{mobile}</p>
           </div>
+
           <div>
             <p className="text-xs text-zinc-500">Password</p>
-            <p className="text-amber-500 font-mono">{generatedCreds.password}</p>
+            <p className="text-amber-500 font-mono">
+              {generatedCreds.password}
+            </p>
           </div>
         </div>
 
@@ -61,6 +79,8 @@ const JoinForm = ({ referralId }: { referralId: string }) => {
     );
   }
 
+  /* REGISTER FORM */
+
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
       <h2 className="text-lg text-white mb-6 flex items-center gap-2">
@@ -73,29 +93,28 @@ const JoinForm = ({ referralId }: { referralId: string }) => {
 
       <div className="space-y-4">
         <input
-          type="text"
           className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white"
           placeholder="Full Name"
           value={name}
           onChange={e => setName(e.target.value)}
         />
+
         <input
-          type="tel"
           className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white"
           placeholder="Mobile"
           value={mobile}
           onChange={e => setMobile(e.target.value)}
         />
+
         <select
           className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white"
           value={role}
-          onChange={e => setRole(e.target.value as UserRole)}
+          onChange={e => setRole(e.target.value)}
         >
-          {Object.values(UserRole)
-            .filter(r => r !== UserRole.ADMIN && r !== UserRole.MANAGER)
-            .map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
+          <option value="SHIRT_MAKER">SHIRT MAKER</option>
+          <option value="TAILOR">TAILOR</option>
+          <option value="FINISHER">FINISHER</option>
+          <option value="PACKER">PACKER</option>
         </select>
       </div>
 
@@ -109,64 +128,70 @@ const JoinForm = ({ referralId }: { referralId: string }) => {
   );
 };
 
-/* =========================
-   MAIN LOGIN PAGE
-========================= */
+/* ================= LOGIN PAGE ================= */
 
 const LoginPage = () => {
   const { loginUser, authenticateUser } = useApp();
   const navigate = useNavigate();
 
   const [referralId, setReferralId] = useState<string | null>(null);
-  const [mobile, setMobile] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [mobile, setMobile] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  /* ===== REFERRAL FIX ===== */
+  /* REFERRAL DETECT */
+
   useEffect(() => {
-    let ref: string | null = null;
+    const params = new URLSearchParams(
+      window.location.hash.includes("?")
+        ? window.location.hash.split("?")[1]
+        : window.location.search
+    );
 
-    if (window.location.hash.includes('?')) {
-      const queryString = window.location.hash.split('?')[1];
-      const params = new URLSearchParams(queryString);
-      ref = params.get('ref');
-    }
-
-    if (!ref && window.location.search) {
-      const params = new URLSearchParams(window.location.search);
-      ref = params.get('ref');
-    }
+    const ref = params.get("ref");
 
     if (ref) {
-      const upperRef = ref.toUpperCase();
-      setReferralId(upperRef);
-      localStorage.setItem('referral', upperRef);
+      const upper = ref.toUpperCase();
+      setReferralId(upper);
+      localStorage.setItem("referral", upper);
     }
   }, []);
 
+  /* LOGIN */
+
   const handleLogin = () => {
-    if (!mobile || !password) return;
-    setError('');
-    setIsLoading(true);
+    if (!mobile || !password) {
+      setError("Enter Mobile & Password");
+      return;
+    }
 
-    const user = authenticateUser(mobile, password);
+    setLoading(true);
+    setError("");
 
-    if (user) {
+    try {
+      const user = authenticateUser(mobile, password);
+
+      if (!user) {
+        setError("Wrong ID or Password");
+        setLoading(false);
+        return;
+      }
+
       loginUser(user.role, user.id);
-      const path =
-        user.role === UserRole.CUSTOMER
-          ? '/track'
-          : user.role === UserRole.SHOWROOM
-          ? '/showroom'
-          : '/dashboard';
 
-      navigate(path);
-    } else {
-      setError('Wrong ID or Password');
-      setIsLoading(false);
+      if (user.role === "CUSTOMER") navigate("/track");
+      else if (user.role === "SHOWROOM") navigate("/showroom");
+      else navigate("/dashboard");
+
+    } catch (err) {
+      console.error(err);
+      setError("System error — contact admin");
+      setLoading(false);
     }
   };
+
+  /* UI */
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6">
@@ -182,12 +207,12 @@ const LoginPage = () => {
 
             <div className="space-y-4">
               <input
-                type="tel"
                 className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white"
                 placeholder="Mobile"
                 value={mobile}
                 onChange={e => setMobile(e.target.value)}
               />
+
               <input
                 type="password"
                 className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white"
@@ -203,10 +228,10 @@ const LoginPage = () => {
 
             <button
               onClick={handleLogin}
-              disabled={isLoading}
+              disabled={loading}
               className="w-full mt-6 bg-amber-600 hover:bg-amber-500 text-black py-3 rounded-xl"
             >
-              {isLoading ? <Loader2 className="animate-spin mx-auto" /> : 'Login'}
+              {loading ? <Loader2 className="animate-spin mx-auto" /> : "Login"}
             </button>
           </div>
         )}
