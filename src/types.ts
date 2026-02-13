@@ -19,3 +19,9 @@ export type SidebarItem = {
   icon?: any;
   path: string;
 };
+export type OrderStage =
+  | "Pending"
+  | "Cutting"
+  | "Stitching"
+  | "Finishing"
+  | "Completed";
