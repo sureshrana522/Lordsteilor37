@@ -20,9 +20,11 @@ export type SidebarItem = {
   path: string;
 };
 
-export type OrderStage =
-  | "Pending"
-  | "Cutting"
-  | "Stitching"
-  | "Finishing"
-  | "Completed";
+export enum OrderStage {
+  PENDING = "Pending",
+  CUTTING = "Cutting",
+  STITCHING = "Stitching",
+  FINISHING = "Finishing",
+  COMPLETED = "Completed",
+  DELIVERED = "Delivered"
+}
