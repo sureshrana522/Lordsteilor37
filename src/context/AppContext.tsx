@@ -1,339 +1,270 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-  useEffect,
-  useMemo,
-  useCallback
+import React,{
+createContext,useContext,useState,ReactNode,useEffect,useMemo,useCallback
 } from "react";
 
-import type {
-  Order,
-  Stats,
-  AppConfig,
-  SystemUser,
-  WalletTransaction,
-  TransactionRequest
+import type{
+Order,Stats,AppConfig,SystemUser,WalletTransaction,TransactionRequest
 } from "../types";
 
-// REMOVED: import { UserRole } from "../types";
 import { MOCK_ORDERS, MOCK_SYSTEM_USERS } from "../services/mockData";
 import { db, initError } from "../services/firebase";
 
-import {
-  collection,
-  onSnapshot,
-  doc,
-  setDoc,
-  query,
-  orderBy,
-  serverTimestamp,
-  addDoc
+import{
+collection,onSnapshot,doc,setDoc,query,orderBy,serverTimestamp,addDoc
 } from "firebase/firestore";
-
-/* ================= CONTEXT TYPE ================= */
-
-// Ye bata raha hai ki AppContext me kya kya values aur functions available hain
-interface AppContextType {
-  role: string; // CHANGED: UserRole se string
-  currentUser: SystemUser | null; // logged in user info
-  stats: Stats; // dashboard ke liye live stats
-  systemUsers: SystemUser[]; // saare system users
-  orders: Order[]; // saare orders
-  transactions: WalletTransaction[]; // wallet transactions
-  requests: TransactionRequest[]; // add/withdraw requests
-  isDemoMode: boolean; // agar firebase nahi hai to demo mode
-
-  loginUser: (role: string, specificUserId?: string) => void; // CHANGED: UserRole se string
-  authenticateUser: (mobile: string, password: string) => SystemUser | null; // login check
-
-  requestAddFunds: (amount: number, utr: string) => Promise<void>; // add funds request
-  requestWithdrawal: (
-    amount: number,
-    method: string,
-    paymentDetails: string
-  ) => Promise<void>; // withdrawal request
-
-  approveRequest: (id: string, approved: boolean) => Promise<boolean>; // admin approve
-}
 
 /* ================= DEFAULT CONFIG ================= */
 
-// Default system config, agar firebase se data na aaye
 const DEFAULT_CONFIG: AppConfig = {
-  isInvestmentEnabled: true,
-  investmentOrderPercent: 5,
-  isWithdrawalEnabled: true,
-  isGalleryEnabled: true,
-  announcement: { isActive: false, imageUrl: null },
-  maintenance: { isActive: false, imageUrl: null, liveTime: null },
-  deductions: {
-    workDeductionPercent: 15,
-    downlineSupportPercent: 100,
-    magicFundPercent: 5
-  },
-  incomeEligibility: { isActive: false, minMonthlyWorkAmount: 3000 },
-  levelRequirements: [],
-  levelDistributionRates: [],
-  companyDetails: {
-    qrUrl: null,
-    upiId: "9571167318@paytm",
-    bankName: "LORD'S BESPOKE",
-    accountNumber: "1234567890",
-    ifscCode: "IFSC0000123",
-    accountName: "LORD'S BESPOKE TAILORS"
-  }
+isInvestmentEnabled:true,
+investmentOrderPercent:5,
+isWithdrawalEnabled:true,
+isGalleryEnabled:true,
+announcement:{isActive:false,imageUrl:null},
+maintenance:{isActive:false,imageUrl:null,liveTime:null},
+deductions:{
+workDeductionPercent:15,
+downlineSupportPercent:100,
+magicFundPercent:5
+},
+incomeEligibility:{isActive:false,minMonthlyWorkAmount:3000},
+levelRequirements:[],
+levelDistributionRates:[],
+companyDetails:{
+qrUrl:null,
+upiId:"9571167318@paytm",
+bankName:"LORD'S BESPOKE",
+accountNumber:"1234567890",
+ifscCode:"IFSC0000123",
+accountName:"LORD'S BESPOKE TAILORS"
+}
 };
 
-/* ================= CONTEXT ================= */
+/* ================= CONTEXT TYPE ================= */
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+interface AppContextType{
+role:string;
+currentUser:SystemUser|null;
+stats:Stats;
+systemUsers:SystemUser[];
+orders:Order[];
+transactions:WalletTransaction[];
+requests:TransactionRequest[];
+config:AppConfig;
+isDemoMode:boolean;
 
-export const useApp = () => {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error("useApp must be used inside AppProvider");
-  return ctx;
+loginUser:(role:string,id?:string)=>void;
+authenticateUser:(mobile:string,password:string)=>SystemUser|null;
+
+requestAddFunds:(amount:number,utr:string)=>Promise<void>;
+requestWithdrawal:(amount:number,method:string,details:string)=>Promise<void>;
+approveRequest:(id:string,approved:boolean)=>Promise<boolean>;
+transferFunds:(targetId:string,amount:number)=>Promise<boolean>;
+}
+
+const AppContext=createContext<AppContextType|undefined>(undefined);
+
+export const useApp=()=>{
+const ctx=useContext(AppContext);
+if(!ctx) throw new Error("useApp must be used inside AppProvider");
+return ctx;
 };
 
 /* ================= PROVIDER ================= */
 
-export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [role, setRole] = useState<string>("SHIRT_MAKER"); // CHANGED: UserRole.SHIRT_MAKER se "SHIRT_MAKER"
-  const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
-  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [requests, setRequests] = useState<TransactionRequest[]>([]);
+export const AppProvider=({children}:{children:ReactNode})=>{
 
-  const isDemoMode = !db || !!initError; // agar firebase setup fail hua to demo
+const[role,setRole]=useState<string>("USER");
+const[currentUser,setCurrentUser]=useState<SystemUser|null>(null);
+const[systemUsers,setSystemUsers]=useState<SystemUser[]>([]);
+const[orders,setOrders]=useState<Order[]>([]);
+const[transactions,setTransactions]=useState<WalletTransaction[]>([]);
+const[requests,setRequests]=useState<TransactionRequest[]>([]);
+const[config]=useState<AppConfig>(DEFAULT_CONFIG);
 
-  /* ================= FIREBASE LISTENERS ================= */
+const isDemoMode=!db||!!initError;
 
-  useEffect(() => {
-    if (isDemoMode) {
-      setSystemUsers(MOCK_SYSTEM_USERS);
-      setOrders(MOCK_ORDERS);
-      return;
-    }
+/* ---------------- FIREBASE LISTENERS ---------------- */
 
-    // Listen real-time system users
-    const unsubUsers = onSnapshot(collection(db!, "system_users"), snap => {
-      setSystemUsers(
-        snap.docs.map(d => ({ ...d.data(), id: d.id } as SystemUser))
-      );
-    });
+useEffect(()=>{
+if(isDemoMode){
+setSystemUsers(MOCK_SYSTEM_USERS);
+setOrders(MOCK_ORDERS);
+return;
+}
 
-    // Listen real-time orders
-    const unsubOrders = onSnapshot(collection(db!, "orders"), snap => {
-      setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id } as Order)));
-    });
+const unsubUsers=onSnapshot(collection(db!,"system_users"),snap=>{
+setSystemUsers(snap.docs.map(d=>({...d.data(),id:d.id} as SystemUser)));
+});
 
-    // Listen real-time transactions
-    const unsubTx = onSnapshot(
-      query(collection(db!, "transactions"), orderBy("date", "desc")),
-      snap => {
-        setTransactions(
-          snap.docs.map(d => ({ ...d.data(), id: d.id } as WalletTransaction))
-        );
-      }
-    );
+const unsubOrders=onSnapshot(collection(db!,"orders"),snap=>{
+setOrders(snap.docs.map(d=>({...d.data(),id:d.id} as Order)));
+});
 
-    // Listen real-time fund/withdraw requests
-    const unsubReq = onSnapshot(
-      query(collection(db!, "requests"), orderBy("date", "desc")),
-      snap => {
-        setRequests(
-          snap.docs.map(d => ({ ...d.data(), id: d.id } as TransactionRequest))
-        );
-      }
-    );
+const unsubTx=onSnapshot(
+query(collection(db!,"transactions"),orderBy("date","desc")),
+snap=>{
+setTransactions(snap.docs.map(d=>({...d.data(),id:d.id} as WalletTransaction)));
+});
 
-    // Cleanup listeners
-    return () => {
-      unsubUsers();
-      unsubOrders();
-      unsubTx();
-      unsubReq();
-    };
-  }, [isDemoMode]);
+const unsubReq=onSnapshot(
+query(collection(db!,"requests"),orderBy("date","desc")),
+snap=>{
+setRequests(snap.docs.map(d=>({...d.data(),id:d.id} as TransactionRequest)));
+});
 
-  /* ================= LOGIN PERSIST ================= */
+return()=>{unsubUsers();unsubOrders();unsubTx();unsubReq();};
+},[isDemoMode]);
 
-  useEffect(() => {
-    // Agar refresh hua to previous logged in user info set kar do
-    const savedId = localStorage.getItem("currentUserId");
-    if (savedId && systemUsers.length > 0) {
-      const user = systemUsers.find(u => u.id === savedId);
-      if (user) {
-        setCurrentUser(user);
-        setRole(user.role);
-      }
-    }
-  }, [systemUsers]);
+/* ---------------- LOGIN PERSIST ---------------- */
 
-  /* ================= AUTH FUNCTIONS ================= */
+useEffect(()=>{
+const savedId=localStorage.getItem("currentUserId");
+if(savedId&&systemUsers.length>0){
+const u=systemUsers.find(x=>x.id===savedId);
+if(u){setCurrentUser(u);setRole(u.role);}
+}
+},[systemUsers]);
 
-  const authenticateUser = useCallback(
-    (mobile: string, password: string) =>
-      systemUsers.find(
-        u => u.mobile === mobile && u.loginPassword === password
-      ) || null,
-    [systemUsers]
-  );
+/* ---------------- AUTH ---------------- */
 
-  const loginUser = useCallback(
-    (r: string, id?: string) => { // CHANGED: UserRole se string
-      const user = id
-        ? systemUsers.find(u => u.id === id)
-        : systemUsers.find(u => u.role === r);
+const authenticateUser=useCallback(
+(mobile:string,password:string)=>
+systemUsers.find(u=>u.mobile===mobile&&u.loginPassword===password)||null,
+[systemUsers]
+);
 
-      if (user) {
-        setCurrentUser(user);
-        setRole(user.role);
-        localStorage.setItem("currentUserId", user.id); // persist login
-      }
-    },
-    [systemUsers]
-  );
+const loginUser=useCallback((r:string,id?:string)=>{
+const u=id?systemUsers.find(x=>x.id===id):systemUsers.find(x=>x.role===r);
+if(u){
+setCurrentUser(u);
+setRole(u.role);
+localStorage.setItem("currentUserId",u.id);
+}
+},[systemUsers]);
 
-  /* ================= WALLET CALCULATION ================= */
+/* ---------------- STATS ---------------- */
 
-  const liveStats: Stats = useMemo(() => {
-    if (!currentUser) {
-      return {
-        totalOrders: 0,
-        revenue: 0,
-        activeWorkers: 0,
-        pendingDeliveries: 0,
-        bookingWallet: 0,
-        uplineWallet: 0,
-        downlineWallet: 0,
-        magicIncome: 0,
-        todaysWallet: 0,
-        performanceWallet: 0,
-        totalIncome: 0
-      };
-    }
+const stats:Stats=useMemo(()=>{
+if(!currentUser)return{
+totalOrders:0,revenue:0,activeWorkers:0,pendingDeliveries:0,
+bookingWallet:0,uplineWallet:0,downlineWallet:0,magicIncome:0,
+todaysWallet:0,performanceWallet:0,totalIncome:0
+};
 
-    // Current user ke transactions
-    const myTx = transactions.filter(
-      t => t.userId === currentUser.id
-    );
+const myTx=transactions.filter(t=>t.userId===currentUser.id);
 
-    const bookingWallet = myTx.reduce((total, t) => {
-      const value = t.type === "Credit" ? t.amount : -t.amount;
-      return t.walletType === "Booking" ? total + value : total;
-    }, 0);
+const bookingWallet=myTx.reduce((t,x)=>{
+const val=x.type==="Credit"?x.amount:-x.amount;
+return x.walletType==="Booking"?t+val:t;
+},0);
 
-    return {
-      totalOrders: orders.length,
-      revenue: bookingWallet,
-      activeWorkers: systemUsers.length,
-      pendingDeliveries: 0,
-      bookingWallet,
-      uplineWallet: 0,
-      downlineWallet: 0,
-      magicIncome: 0,
-      todaysWallet: 0,
-      performanceWallet: 0,
-      totalIncome: bookingWallet
-    };
-  }, [transactions, currentUser, orders, systemUsers]);
+return{
+totalOrders:orders.length,
+revenue:bookingWallet,
+activeWorkers:systemUsers.length,
+pendingDeliveries:0,
+bookingWallet,
+uplineWallet:0,
+downlineWallet:0,
+magicIncome:0,
+todaysWallet:0,
+performanceWallet:0,
+totalIncome:bookingWallet
+};
+},[transactions,currentUser,orders,systemUsers]);
 
-  /* ================= REQUEST FUNCTIONS ================= */
+/* ---------------- REQUESTS ---------------- */
 
-  const requestAddFunds = async (amount: number, utr: string) => {
-    if (!db || !currentUser) return;
+const requestAddFunds=async(amount:number,utr:string)=>{
+if(!db||!currentUser)return;
+await addDoc(collection(db,"requests"),{
+userId:currentUser.id,
+amount:Number(amount),
+utr,
+type:"ADD_FUNDS",
+status:"PENDING",
+date:serverTimestamp()
+});
+};
 
-    // User ke liye ADD_FUNDS request create
-    await addDoc(collection(db, "requests"), {
-      userId: currentUser.id,
-      amount: Number(amount),
-      utr,
-      type: "ADD_FUNDS",
-      status: "PENDING",
-      date: serverTimestamp()
-    });
-  };
+const requestWithdrawal=async(amount:number,method:string,details:string)=>{
+if(!db||!currentUser)return;
+await addDoc(collection(db,"requests"),{
+userId:currentUser.id,
+amount:Number(amount),
+method,
+paymentDetails:details,
+type:"WITHDRAW",
+status:"PENDING",
+date:serverTimestamp()
+});
+};
 
-  const requestWithdrawal = async (
-    amount: number,
-    method: string,
-    paymentDetails: string
-  ) => {
-    if (!db || !currentUser) return;
+/* ---------------- TRANSFER ---------------- */
 
-    // User ke liye WITHDRAW request create
-    await addDoc(collection(db, "requests"), {
-      userId: currentUser.id,
-      amount: Number(amount),
-      method,
-      paymentDetails,
-      type: "WITHDRAW",
-      status: "PENDING",
-      date: serverTimestamp()
-    });
-  };
+const transferFunds=async(targetId:string,amount:number)=>{
+if(!db||!currentUser) return false;
+if(targetId===currentUser.id) return false;
 
-  const approveRequest = async (
-    requestId: string,
-    approved: boolean
-  ): Promise<boolean> => {
-    if (!db) return false;
+try{
+await addDoc(collection(db,"transactions"),{
+userId:currentUser.id,
+amount,
+type:"Debit",
+walletType:"Booking",
+description:`Transfer to ${targetId}`,
+date:serverTimestamp()
+});
 
-    const req = requests.find(r => r.id === requestId);
-    if (!req || req.status !== "PENDING") return false;
+await addDoc(collection(db,"transactions"),{
+userId:targetId,
+amount,
+type:"Credit",
+walletType:"Booking",
+description:`Received from ${currentUser.id}`,
+date:serverTimestamp()
+});
 
-    try {
-      // Update request status
-      await setDoc(
-        doc(db, "requests", requestId),
-        { status: approved ? "APPROVED" : "REJECTED" },
-        { merge: true }
-      );
+return true;
+}catch{
+return false;
+}
+};
 
-      // Agar approved hai to transaction bhi add kar do
-      if (approved) {
-        await addDoc(collection(db, "transactions"), {
-          userId: req.userId,
-          amount: Number(req.amount),
-          type: req.type === "WITHDRAW" ? "Debit" : "Credit",
-          walletType: "Booking",
-          description:
-            req.type === "WITHDRAW"
-              ? "Withdrawal Approved"
-              : "Fund Added (Admin Approved)",
-          date: serverTimestamp()
-        });
-      }
+/* ---------------- APPROVE ---------------- */
 
-      return true;
-    } catch (error) {
-      console.error("Approve Error:", error);
-      return false;
-    }
-  };
+const approveRequest=async(id:string,approved:boolean)=>{
+if(!db) return false;
+const req=requests.find(r=>r.id===id);
+if(!req||req.status!=="PENDING") return false;
 
-  return (
-    <AppContext.Provider
-      value={{
-        role,
-        currentUser,
-        stats: liveStats,
-        systemUsers,
-        orders,
-        transactions,
-        requests,
-        isDemoMode,
-        loginUser,
-        authenticateUser,
-        requestAddFunds,
-        requestWithdrawal,
-        approveRequest
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  );
+await setDoc(doc(db,"requests",id),
+{status:approved?"APPROVED":"REJECTED"},{merge:true});
+
+if(approved){
+await addDoc(collection(db,"transactions"),{
+userId:req.userId,
+amount:req.amount,
+type:req.type==="WITHDRAW"?"Debit":"Credit",
+walletType:"Booking",
+description:"Admin Approved",
+date:serverTimestamp()
+});
+}
+return true;
+};
+
+/* ---------------- PROVIDER ---------------- */
+
+return(
+<AppContext.Provider value={{
+role,currentUser,stats,systemUsers,orders,transactions,requests,
+config,isDemoMode,
+loginUser,authenticateUser,
+requestAddFunds,requestWithdrawal,approveRequest,transferFunds
+}}>
+{children}
+</AppContext.Provider>
+);
 };
