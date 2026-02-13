@@ -8,9 +8,6 @@ import React, {
   useCallback
 } from "react";
 
-/* =========================
-   TYPE IMPORTS (TYPE ONLY)
-========================= */
 import type {
   Customer,
   Material,
@@ -28,9 +25,6 @@ import type {
   SystemLog
 } from "../types";
 
-/* =========================
-   RUNTIME IMPORTS (ENUM)
-========================= */
 import { UserRole, OrderStage } from "../types";
 
 import {
@@ -51,12 +45,11 @@ import {
   query,
   orderBy,
   limit,
-  serverTimestamp
+  serverTimestamp,
+  addDoc
 } from "firebase/firestore";
 
-/* =========================
-   CONTEXT TYPE
-========================= */
+/* ================= CONTEXT TYPE ================= */
 
 interface AppContextType {
   role: UserRole;
@@ -75,32 +68,17 @@ interface AppContextType {
   getDashboardStats: () => Stats;
   getWalletHistory: (walletType: string) => WalletTransaction[];
 
-  requestAddFunds: (amount: number, utr: string) => void;
-  requestWithdrawal: (amount: number, method: string, paymentDetails: string) => void;
-
-  releaseFundsManually: (
-    userId: string,
+  requestAddFunds: (amount: number, utr: string) => Promise<void>;
+  requestWithdrawal: (
     amount: number,
-    walletType: string,
-    description: string
-  ) => Promise<boolean>;
+    method: string,
+    paymentDetails: string
+  ) => Promise<void>;
+
+  approveRequest: (id: string, approved: boolean) => Promise<boolean>;
 }
 
-/* =========================
-   CONTEXT
-========================= */
-
-const AppContext = createContext<AppContextType | undefined>(undefined);
-
-export const useApp = () => {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error("useApp must be used inside AppProvider");
-  return ctx;
-};
-
-/* =========================
-   DEFAULT CONFIG
-========================= */
+/* ================= DEFAULT CONFIG ================= */
 
 const DEFAULT_CONFIG: AppConfig = {
   isInvestmentEnabled: true,
@@ -129,9 +107,17 @@ const DEFAULT_CONFIG: AppConfig = {
   }
 };
 
-/* =========================
-   PROVIDER
-========================= */
+/* ================= CONTEXT ================= */
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const useApp = () => {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error("useApp must be used inside AppProvider");
+  return ctx;
+};
+
+/* ================= PROVIDER ================= */
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<UserRole>(UserRole.SHIRT_MAKER);
@@ -144,9 +130,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const isDemoMode = !db || !!initError;
 
-  /* =========================
-     FIREBASE LISTENERS
-  ========================= */
+  /* ================= FIREBASE LISTENERS ================= */
 
   useEffect(() => {
     if (isDemoMode) {
@@ -157,27 +141,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const unsubUsers = onSnapshot(
       collection(db!, "system_users"),
-      snap => setSystemUsers(snap.docs.map(d => ({ ...d.data(), id: d.id } as SystemUser)))
+      snap =>
+        setSystemUsers(
+          snap.docs.map(d => ({ ...d.data(), id: d.id } as SystemUser))
+        )
     );
 
     const unsubOrders = onSnapshot(
       collection(db!, "orders"),
-      snap => setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id } as Order)))
+      snap =>
+        setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id } as Order)))
     );
 
     const unsubTx = onSnapshot(
-      query(collection(db!, "transactions"), orderBy("date", "desc"), limit(1000)),
-      snap => setTransactions(snap.docs.map(d => ({ ...d.data(), id: d.id } as WalletTransaction)))
+      query(collection(db!, "transactions"), orderBy("date", "desc")),
+      snap =>
+        setTransactions(
+          snap.docs.map(d => ({ ...d.data(), id: d.id } as WalletTransaction))
+        )
     );
 
     const unsubReq = onSnapshot(
-      query(collection(db!, "requests"), orderBy("date", "desc"), limit(100)),
-      snap => setRequests(snap.docs.map(d => ({ ...d.data(), id: d.id } as TransactionRequest)))
-    );
-
-    const unsubConfig = onSnapshot(
-      doc(db!, "app_config", "settings"),
-      snap => snap.exists() && setConfig(snap.data() as AppConfig)
+      query(collection(db!, "requests"), orderBy("date", "desc")),
+      snap =>
+        setRequests(
+          snap.docs.map(d => ({ ...d.data(), id: d.id } as TransactionRequest))
+        )
     );
 
     return () => {
@@ -185,17 +174,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       unsubOrders();
       unsubTx();
       unsubReq();
-      unsubConfig();
     };
   }, [isDemoMode]);
 
-  /* =========================
-     AUTH
-  ========================= */
+  /* ================= AUTH ================= */
 
   const authenticateUser = useCallback(
     (mobile: string, password: string) =>
-      systemUsers.find(u => u.mobile === mobile && u.loginPassword === password) || null,
+      systemUsers.find(
+        u => u.mobile === mobile && u.loginPassword === password
+      ) || null,
     [systemUsers]
   );
 
@@ -212,9 +200,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     [systemUsers]
   );
 
-  /* =========================
-     WALLET STATS
-  ========================= */
+  /* ================= WALLET CALCULATION ================= */
 
   const liveStats: Stats = useMemo(() => {
     if (!currentUser) {
@@ -235,41 +221,97 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const myTx = transactions.filter(t => t.userId === currentUser.id);
 
-    let booking = 0,
-      upline = 0,
-      downline = 0,
-      magic = 0,
-      daily = 0;
+    let booking = 0;
 
     myTx.forEach(t => {
-      const val = t.type === "Credit" ? t.amount : -t.amount;
-      if (t.walletType === "Booking") booking += val;
-      if (t.walletType === "Upline") upline += val;
-      if (t.walletType === "Downline") downline += val;
-      if (t.walletType === "Magic") magic += val;
-      if (t.walletType === "Daily") daily += val;
+      const value = t.type === "Credit" ? t.amount : -t.amount;
+      if (t.walletType === "Booking") booking += value;
     });
 
     return {
       totalOrders: orders.length,
       revenue: booking,
       activeWorkers: systemUsers.length,
-      pendingDeliveries: orders.filter(
-        o => o.stage !== OrderStage.DELIVERED
-      ).length,
+      pendingDeliveries: 0,
       bookingWallet: booking,
-      uplineWallet: upline,
-      downlineWallet: downline,
-      magicIncome: magic,
-      todaysWallet: daily,
+      uplineWallet: 0,
+      downlineWallet: 0,
+      magicIncome: 0,
+      todaysWallet: 0,
       performanceWallet: 0,
-      totalIncome: booking + upline + downline + magic + daily
+      totalIncome: booking
     };
   }, [transactions, currentUser, orders, systemUsers]);
 
-  /* =========================
-     PROVIDER VALUE
-  ========================= */
+  /* ================= REQUEST FUNCTIONS ================= */
+
+  const requestAddFunds = async (amount: number, utr: string) => {
+    if (!db || !currentUser) return;
+
+    await addDoc(collection(db, "requests"), {
+      userId: currentUser.id,
+      amount: Number(amount),
+      utr,
+      type: "ADD_FUNDS",
+      status: "PENDING",
+      date: serverTimestamp()
+    });
+  };
+
+  const requestWithdrawal = async (
+    amount: number,
+    method: string,
+    paymentDetails: string
+  ) => {
+    if (!db || !currentUser) return;
+
+    await addDoc(collection(db, "requests"), {
+      userId: currentUser.id,
+      amount: Number(amount),
+      method,
+      paymentDetails,
+      type: "WITHDRAW",
+      status: "PENDING",
+      date: serverTimestamp()
+    });
+  };
+
+  const approveRequest = async (
+    requestId: string,
+    approved: boolean
+  ): Promise<boolean> => {
+    if (!db) return false;
+
+    const req = requests.find(r => r.id === requestId);
+    if (!req || req.status !== "PENDING") return false;
+
+    try {
+      await setDoc(
+        doc(db, "requests", requestId),
+        { status: approved ? "APPROVED" : "REJECTED" },
+        { merge: true }
+      );
+
+      if (approved) {
+        await addDoc(collection(db, "transactions"), {
+          userId: req.userId,
+          amount: Number(req.amount),
+          type: req.type === "WITHDRAW" ? "Debit" : "Credit",
+          walletType: "Booking",
+          description:
+            req.type === "WITHDRAW"
+              ? "Withdrawal Approved"
+              : "Fund Added (Admin Approved)",
+          date: serverTimestamp()
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  };
 
   return (
     <AppContext.Provider
@@ -288,11 +330,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         getDashboardStats: () => liveStats,
         getWalletHistory: wallet =>
           transactions.filter(
-            tx => currentUser && tx.userId === currentUser.id && tx.walletType === wallet
+            tx =>
+              currentUser &&
+              tx.userId === currentUser.id &&
+              tx.walletType === wallet
           ),
-        requestAddFunds: async () => {},
-        requestWithdrawal: async () => {},
-        releaseFundsManually: async () => true
+        requestAddFunds,
+        requestWithdrawal,
+        approveRequest
       }}
     >
       {children}
