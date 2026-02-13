@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 import { useApp } from '../context/AppContext';
-import type { UserRole } from '../types'; // ✅ TYPE-ONLY IMPORT (IMPORTANT)
+import { UserRole } from '../types'; // ✅ FIXED: Normal import (NOT type-only)
 
 interface SidebarProps {
   isOpen: boolean;
@@ -149,21 +149,13 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 <MenuItem to="/orders" icon={Layers} label="Coat/Suit Dept" />
               )}
               {hasAccess([UserRole.FINISHING]) && (
-                <MenuItem
-                  to="/orders"
-                  icon={Package}
-                  label="Kaaj-Button Dept"
-                />
+                <MenuItem to="/orders" icon={Package} label="Kaaj-Button Dept" />
               )}
               {hasAccess([UserRole.PRESS]) && (
                 <MenuItem to="/orders" icon={Zap} label="Press Station" />
               )}
               {hasAccess([UserRole.DELIVERY]) && (
-                <MenuItem
-                  to="/orders"
-                  icon={Truck}
-                  label="Delivery Logistics"
-                />
+                <MenuItem to="/orders" icon={Truck} label="Delivery Logistics" />
               )}
             </>
           )}
@@ -171,16 +163,13 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           {(role === UserRole.ADMIN || role === UserRole.MANAGER) && (
             <>
               <div className="my-6 border-t border-zinc-900 mx-2" />
-              <MenuItem
-                to="/materials"
-                icon={Box}
-                label="Inventory Manager"
-              />
+              <MenuItem to="/materials" icon={Box} label="Inventory Manager" />
             </>
           )}
 
           <div className="my-6 border-t border-zinc-900 mx-2" />
           <MenuItem to="/profile" icon={User} label="Digital ID & Profile" />
+
           {role === UserRole.ADMIN && (
             <MenuItem to="/config" icon={Settings} label="System Config" />
           )}
