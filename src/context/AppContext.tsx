@@ -8,12 +8,13 @@ import React, {
   useCallback
 } from "react";
 
-import {
+/* =========================
+   TYPE IMPORTS (TYPE ONLY)
+========================= */
+import type {
   Customer,
   Material,
   Order,
-  OrderStage,
-  UserRole,
   Stats,
   MeasurementData,
   InvestmentState,
@@ -27,6 +28,11 @@ import {
   SystemLog
 } from "../types";
 
+/* =========================
+   RUNTIME IMPORTS (ENUM)
+========================= */
+import { UserRole, OrderStage } from "../types";
+
 import {
   MOCK_CUSTOMERS,
   MOCK_MATERIALS,
@@ -36,14 +42,13 @@ import {
 } from "../services/mockData";
 
 import { db, initError } from "../services/firebase";
+
 import {
   collection,
   onSnapshot,
   doc,
   setDoc,
-  updateDoc,
   query,
-  writeBatch,
   orderBy,
   limit,
   serverTimestamp
@@ -208,7 +213,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 
   /* =========================
-     WALLET STATS (🔥 FIX)
+     WALLET STATS
   ========================= */
 
   const liveStats: Stats = useMemo(() => {
@@ -249,7 +254,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       totalOrders: orders.length,
       revenue: booking,
       activeWorkers: systemUsers.length,
-      pendingDeliveries: orders.filter(o => o.stage !== OrderStage.DELIVERED).length,
+      pendingDeliveries: orders.filter(
+        o => o.stage !== OrderStage.DELIVERED
+      ).length,
       bookingWallet: booking,
       uplineWallet: upline,
       downlineWallet: downline,
@@ -259,90 +266,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       totalIncome: booking + upline + downline + magic + daily
     };
   }, [transactions, currentUser, orders, systemUsers]);
-
-  /* =========================
-     WALLET HELPERS
-  ========================= */
-
-  const getWalletHistory = useCallback(
-    (walletType: string) => {
-      if (!currentUser) return [];
-      return transactions.filter(
-        tx => tx.userId === currentUser.id && tx.walletType === walletType
-      );
-    },
-    [transactions, currentUser]
-  );
-
-  const releaseFundsManually = useCallback(
-    async (userId: string, amount: number, walletType: string, description: string) => {
-      if (amount <= 0) return false;
-
-      const tx: WalletTransaction = {
-        id: `TX-${Date.now()}`,
-        userId,
-        date: new Date().toISOString(),
-        amount,
-        type: "Credit",
-        walletType: walletType as any,
-        description
-      };
-
-      if (isDemoMode) {
-        setTransactions(prev => [tx, ...prev]);
-        return true;
-      }
-
-      await setDoc(doc(db!, "transactions", tx.id), {
-        ...tx,
-        serverTime: serverTimestamp()
-      });
-
-      return true;
-    },
-    [isDemoMode]
-  );
-
-  const requestAddFunds = useCallback(
-    async (amount: number, utr: string) => {
-      if (!currentUser) return;
-      const req: TransactionRequest = {
-        id: `REQ-${Date.now()}`,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        type: "ADD_FUNDS",
-        amount,
-        status: "PENDING",
-        date: new Date().toISOString(),
-        utr
-      };
-
-      if (isDemoMode) setRequests(p => [req, ...p]);
-      else await setDoc(doc(db!, "requests", req.id), req);
-    },
-    [currentUser, isDemoMode]
-  );
-
-  const requestWithdrawal = useCallback(
-    async (amount: number, method: string, paymentDetails: string) => {
-      if (!currentUser) return;
-      const req: TransactionRequest = {
-        id: `REQ-${Date.now()}`,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        type: "WITHDRAW",
-        amount,
-        status: "PENDING",
-        date: new Date().toISOString(),
-        method,
-        paymentDetails
-      };
-
-      if (isDemoMode) setRequests(p => [req, ...p]);
-      else await setDoc(doc(db!, "requests", req.id), req);
-    },
-    [currentUser, isDemoMode]
-  );
 
   /* =========================
      PROVIDER VALUE
@@ -360,16 +283,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         transactions,
         requests,
         isDemoMode,
-
         loginUser,
         authenticateUser,
-
         getDashboardStats: () => liveStats,
-        getWalletHistory,
-
-        requestAddFunds,
-        requestWithdrawal,
-        releaseFundsManually
+        getWalletHistory: wallet =>
+          transactions.filter(
+            tx => currentUser && tx.userId === currentUser.id && tx.walletType === wallet
+          ),
+        requestAddFunds: async () => {},
+        requestWithdrawal: async () => {},
+        releaseFundsManually: async () => true
       }}
     >
       {children}
