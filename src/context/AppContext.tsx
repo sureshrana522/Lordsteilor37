@@ -17,7 +17,7 @@ import type {
   TransactionRequest
 } from "../types";
 
-import { UserRole } from "../types";
+// REMOVED: import { UserRole } from "../types";
 import { MOCK_ORDERS, MOCK_SYSTEM_USERS } from "../services/mockData";
 import { db, initError } from "../services/firebase";
 
@@ -36,7 +36,7 @@ import {
 
 // Ye bata raha hai ki AppContext me kya kya values aur functions available hain
 interface AppContextType {
-  role: UserRole; // current logged in user ka role
+  role: string; // CHANGED: UserRole se string
   currentUser: SystemUser | null; // logged in user info
   stats: Stats; // dashboard ke liye live stats
   systemUsers: SystemUser[]; // saare system users
@@ -45,7 +45,7 @@ interface AppContextType {
   requests: TransactionRequest[]; // add/withdraw requests
   isDemoMode: boolean; // agar firebase nahi hai to demo mode
 
-  loginUser: (role: UserRole, specificUserId?: string) => void; // login karne ka function
+  loginUser: (role: string, specificUserId?: string) => void; // CHANGED: UserRole se string
   authenticateUser: (mobile: string, password: string) => SystemUser | null; // login check
 
   requestAddFunds: (amount: number, utr: string) => Promise<void>; // add funds request
@@ -99,7 +99,7 @@ export const useApp = () => {
 /* ================= PROVIDER ================= */
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [role, setRole] = useState<UserRole>(UserRole.SHIRT_MAKER);
+  const [role, setRole] = useState<string>("SHIRT_MAKER"); // CHANGED: UserRole.SHIRT_MAKER se "SHIRT_MAKER"
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -183,7 +183,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const loginUser = useCallback(
-    (r: UserRole, id?: string) => {
+    (r: string, id?: string) => { // CHANGED: UserRole se string
       const user = id
         ? systemUsers.find(u => u.id === id)
         : systemUsers.find(u => u.role === r);
