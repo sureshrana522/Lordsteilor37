@@ -9,32 +9,16 @@ import React, {
 } from "react";
 
 import type {
-  Customer,
-  Material,
   Order,
   Stats,
-  MeasurementData,
-  InvestmentState,
   AppConfig,
-  GalleryItem,
   SystemUser,
-  Rate,
-  StitchingRate,
   WalletTransaction,
-  TransactionRequest,
-  SystemLog
+  TransactionRequest
 } from "../types";
 
-import { UserRole, OrderStage } from "../types";
-
-import {
-  MOCK_CUSTOMERS,
-  MOCK_MATERIALS,
-  MOCK_ORDERS,
-  MOCK_GALLERY,
-  MOCK_SYSTEM_USERS
-} from "../services/mockData";
-
+import { UserRole } from "../types";
+import { MOCK_ORDERS, MOCK_SYSTEM_USERS } from "../services/mockData";
 import { db, initError } from "../services/firebase";
 
 import {
@@ -44,42 +28,39 @@ import {
   setDoc,
   query,
   orderBy,
-  limit,
   serverTimestamp,
   addDoc
 } from "firebase/firestore";
 
 /* ================= CONTEXT TYPE ================= */
 
+// Ye bata raha hai ki AppContext me kya kya values aur functions available hain
 interface AppContextType {
-  role: UserRole;
-  currentUser: SystemUser | null;
-  stats: Stats;
-  config: AppConfig;
-  systemUsers: SystemUser[];
-  orders: Order[];
-  transactions: WalletTransaction[];
-  requests: TransactionRequest[];
-  isDemoMode: boolean;
+  role: UserRole; // current logged in user ka role
+  currentUser: SystemUser | null; // logged in user info
+  stats: Stats; // dashboard ke liye live stats
+  systemUsers: SystemUser[]; // saare system users
+  orders: Order[]; // saare orders
+  transactions: WalletTransaction[]; // wallet transactions
+  requests: TransactionRequest[]; // add/withdraw requests
+  isDemoMode: boolean; // agar firebase nahi hai to demo mode
 
-  loginUser: (role: UserRole, specificUserId?: string) => void;
-  authenticateUser: (mobile: string, password: string) => SystemUser | null;
+  loginUser: (role: UserRole, specificUserId?: string) => void; // login karne ka function
+  authenticateUser: (mobile: string, password: string) => SystemUser | null; // login check
 
-  getDashboardStats: () => Stats;
-  getWalletHistory: (walletType: string) => WalletTransaction[];
-
-  requestAddFunds: (amount: number, utr: string) => Promise<void>;
+  requestAddFunds: (amount: number, utr: string) => Promise<void>; // add funds request
   requestWithdrawal: (
     amount: number,
     method: string,
     paymentDetails: string
-  ) => Promise<void>;
+  ) => Promise<void>; // withdrawal request
 
-  approveRequest: (id: string, approved: boolean) => Promise<boolean>;
+  approveRequest: (id: string, approved: boolean) => Promise<boolean>; // admin approve
 }
 
 /* ================= DEFAULT CONFIG ================= */
 
+// Default system config, agar firebase se data na aaye
 const DEFAULT_CONFIG: AppConfig = {
   isInvestmentEnabled: true,
   investmentOrderPercent: 5,
@@ -93,10 +74,8 @@ const DEFAULT_CONFIG: AppConfig = {
     magicFundPercent: 5
   },
   incomeEligibility: { isActive: false, minMonthlyWorkAmount: 3000 },
-  levelRequirements: Array(10)
-    .fill(null)
-    .map((_, i) => ({ level: i + 1, requiredDirects: i + 1, isOpen: true })),
-  levelDistributionRates: [25, 15, 10, 10, 10, 10, 5, 5, 5, 5],
+  levelRequirements: [],
+  levelDistributionRates: [],
   companyDetails: {
     qrUrl: null,
     upiId: "9571167318@paytm",
@@ -126,9 +105,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [requests, setRequests] = useState<TransactionRequest[]>([]);
-  const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 
-  const isDemoMode = !db || !!initError;
+  const isDemoMode = !db || !!initError; // agar firebase setup fail hua to demo
 
   /* ================= FIREBASE LISTENERS ================= */
 
@@ -139,36 +117,39 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const unsubUsers = onSnapshot(
-      collection(db!, "system_users"),
-      snap =>
-        setSystemUsers(
-          snap.docs.map(d => ({ ...d.data(), id: d.id } as SystemUser))
-        )
-    );
+    // Listen real-time system users
+    const unsubUsers = onSnapshot(collection(db!, "system_users"), snap => {
+      setSystemUsers(
+        snap.docs.map(d => ({ ...d.data(), id: d.id } as SystemUser))
+      );
+    });
 
-    const unsubOrders = onSnapshot(
-      collection(db!, "orders"),
-      snap =>
-        setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id } as Order)))
-    );
+    // Listen real-time orders
+    const unsubOrders = onSnapshot(collection(db!, "orders"), snap => {
+      setOrders(snap.docs.map(d => ({ ...d.data(), id: d.id } as Order)));
+    });
 
+    // Listen real-time transactions
     const unsubTx = onSnapshot(
       query(collection(db!, "transactions"), orderBy("date", "desc")),
-      snap =>
+      snap => {
         setTransactions(
           snap.docs.map(d => ({ ...d.data(), id: d.id } as WalletTransaction))
-        )
+        );
+      }
     );
 
+    // Listen real-time fund/withdraw requests
     const unsubReq = onSnapshot(
       query(collection(db!, "requests"), orderBy("date", "desc")),
-      snap =>
+      snap => {
         setRequests(
           snap.docs.map(d => ({ ...d.data(), id: d.id } as TransactionRequest))
-        )
+        );
+      }
     );
 
+    // Cleanup listeners
     return () => {
       unsubUsers();
       unsubOrders();
@@ -177,7 +158,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isDemoMode]);
 
-  /* ================= AUTH ================= */
+  /* ================= LOGIN PERSIST ================= */
+
+  useEffect(() => {
+    // Agar refresh hua to previous logged in user info set kar do
+    const savedId = localStorage.getItem("currentUserId");
+    if (savedId && systemUsers.length > 0) {
+      const user = systemUsers.find(u => u.id === savedId);
+      if (user) {
+        setCurrentUser(user);
+        setRole(user.role);
+      }
+    }
+  }, [systemUsers]);
+
+  /* ================= AUTH FUNCTIONS ================= */
 
   const authenticateUser = useCallback(
     (mobile: string, password: string) =>
@@ -192,9 +187,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const user = id
         ? systemUsers.find(u => u.id === id)
         : systemUsers.find(u => u.role === r);
+
       if (user) {
         setCurrentUser(user);
         setRole(user.role);
+        localStorage.setItem("currentUserId", user.id); // persist login
       }
     },
     [systemUsers]
@@ -209,37 +206,38 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         revenue: 0,
         activeWorkers: 0,
         pendingDeliveries: 0,
+        bookingWallet: 0,
         uplineWallet: 0,
         downlineWallet: 0,
+        magicIncome: 0,
         todaysWallet: 0,
         performanceWallet: 0,
-        bookingWallet: 0,
-        magicIncome: 0,
         totalIncome: 0
       };
     }
 
-    const myTx = transactions.filter(t => t.userId === currentUser.id);
+    // Current user ke transactions
+    const myTx = transactions.filter(
+      t => t.userId === currentUser.id
+    );
 
-    let booking = 0;
-
-    myTx.forEach(t => {
+    const bookingWallet = myTx.reduce((total, t) => {
       const value = t.type === "Credit" ? t.amount : -t.amount;
-      if (t.walletType === "Booking") booking += value;
-    });
+      return t.walletType === "Booking" ? total + value : total;
+    }, 0);
 
     return {
       totalOrders: orders.length,
-      revenue: booking,
+      revenue: bookingWallet,
       activeWorkers: systemUsers.length,
       pendingDeliveries: 0,
-      bookingWallet: booking,
+      bookingWallet,
       uplineWallet: 0,
       downlineWallet: 0,
       magicIncome: 0,
       todaysWallet: 0,
       performanceWallet: 0,
-      totalIncome: booking
+      totalIncome: bookingWallet
     };
   }, [transactions, currentUser, orders, systemUsers]);
 
@@ -248,6 +246,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const requestAddFunds = async (amount: number, utr: string) => {
     if (!db || !currentUser) return;
 
+    // User ke liye ADD_FUNDS request create
     await addDoc(collection(db, "requests"), {
       userId: currentUser.id,
       amount: Number(amount),
@@ -265,6 +264,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     if (!db || !currentUser) return;
 
+    // User ke liye WITHDRAW request create
     await addDoc(collection(db, "requests"), {
       userId: currentUser.id,
       amount: Number(amount),
@@ -286,12 +286,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!req || req.status !== "PENDING") return false;
 
     try {
+      // Update request status
       await setDoc(
         doc(db, "requests", requestId),
         { status: approved ? "APPROVED" : "REJECTED" },
         { merge: true }
       );
 
+      // Agar approved hai to transaction bhi add kar do
       if (approved) {
         await addDoc(collection(db, "transactions"), {
           userId: req.userId,
@@ -308,7 +310,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       return true;
     } catch (error) {
-      console.error(error);
+      console.error("Approve Error:", error);
       return false;
     }
   };
@@ -319,7 +321,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         role,
         currentUser,
         stats: liveStats,
-        config,
         systemUsers,
         orders,
         transactions,
@@ -327,14 +328,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         isDemoMode,
         loginUser,
         authenticateUser,
-        getDashboardStats: () => liveStats,
-        getWalletHistory: wallet =>
-          transactions.filter(
-            tx =>
-              currentUser &&
-              tx.userId === currentUser.id &&
-              tx.walletType === wallet
-          ),
         requestAddFunds,
         requestWithdrawal,
         approveRequest
